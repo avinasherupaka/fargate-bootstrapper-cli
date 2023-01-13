@@ -1,0 +1,109 @@
+{
+  "Stacks": [
+      {
+          "StackName": "c7-user-admin-poc-test-01-ekRWmLXFe5RDB",
+          "StackStatus": "CREATE_COMPLETE",
+          "ResourceARN": "arn:aws:cloudformation:us-east-1:123456789101:stack/spectrum-test-one-aeca74df-aea5-4afd-9af4-ee643bab74b8/ab07c3f0-a31e-11e9-bc53-12a3b4ca1ea2", 
+          "Tags": [
+              {
+                  "Value": "5180-9130-GSC00040", 
+                  "Key": "mon:cost-center"
+              }, 
+              {
+                  "Value": "internal", 
+                  "Key": "mon:data-classification"
+              }, 
+              {
+                  "Value": "non-prod", 
+                  "Key": "mon:env"
+              }, 
+              {
+                  "Value": "jtvale", 
+                  "Key": "mon:owner"
+              }, 
+              {
+                  "Value": "spectrum-test-one", 
+                  "Key": "mon:project"
+              }, 
+              {
+                  "Value": "no", 
+                  "Key": "mon:regulated"
+              }, 
+              {
+                  "Value": "yes", 
+                  "Key": "spectrum:deployment"
+              }
+          ]
+      },
+      {
+        "StackName": "c7-user-admin-poc-test-02-ekRWmLXFe5RDB",
+        "StackStatus": "CREATE_IN_PROGRESS",
+        "ResourceARN": "arn:aws:cloudformation:us-east-1:123456789101:stack/spectrum-test-two-aeca74df-aea5-4afd-9af4-ee643bab74b8/ab07c3f0-a31e-11e9-bc53-12a3b4ca1ea2", 
+        "Tags": [
+            {
+                "Value": "5180-9130-GSC00040", 
+                "Key": "mon:cost-center"
+            }, 
+            {
+                "Value": "internal", 
+                "Key": "mon:data-classification"
+            }, 
+            {
+                "Value": "non-prod", 
+                "Key": "mon:env"
+            }, 
+            {
+                "Value": "jtvale", 
+                "Key": "mon:owner"
+            }, 
+            {
+                "Value": "spectrum-test-two", 
+                "Key": "mon:project"
+            }, 
+            {
+                "Value": "no", 
+                "Key": "mon:regulated"
+            }, 
+            {
+                "Value": "yes", 
+                "Key": "spectrum:deployment"
+            }
+        ]
+    },
+    {
+        "StackName": "c7-user-admin-poc-test-02-ekRWmLXFe5RDB",
+        "StackStatus": "DELETE_IN_PROGRESS",
+        "ResourceARN": "arn:aws:cloudformation:us-east-1:123456789101:stack/spectrum-test-three-aeca74df-aea5-4afd-9af4-ee643bab74b8/ab07c3f0-a31e-11e9-bc53-12a3b4ca1ea2", 
+        "Tags": [
+            {
+                "Value": "5180-9130-GSC00040", 
+                "Key": "mon:cost-center"
+            }, 
+            {
+                "Value": "internal", 
+                "Key": "mon:data-classification"
+            }, 
+            {
+                "Value": "non-prod", 
+                "Key": "mon:env"
+            }, 
+            {
+                "Value": "jtvale", 
+                "Key": "mon:owner"
+            }, 
+            {
+                "Value": "spectrum-test-three", 
+                "Key": "mon:project"
+            }, 
+            {
+                "Value": "no", 
+                "Key": "mon:regulated"
+            }, 
+            {
+                "Value": "yes", 
+                "Key": "spectrum:deployment"
+            }
+        ]
+    }
+  ]
+}

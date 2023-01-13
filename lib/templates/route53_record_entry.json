@@ -1,0 +1,17 @@
+{
+  "Comment": "DNS Record creation by Spectrum",
+  "Changes": [
+    {
+      "Action": "__ACTION__",
+      "ResourceRecordSet": {
+        "AliasTarget": {
+          "HostedZoneId": "__LOAD_BALANCER_ID__",
+          "EvaluateTargetHealth": false,
+          "DNSName": "dualstack.__ALIAS_DNS_NAME__"
+        },
+        "Type": "A",
+        "Name": "__NAME__"
+      }
+    }
+  ]
+}

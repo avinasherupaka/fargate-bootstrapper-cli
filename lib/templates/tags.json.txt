@@ -1,0 +1,29 @@
+[{
+    "Key": "mon:owner",
+    "Value": "__OWNER__"
+  },
+  {
+    "Key": "mon:cost-center",
+    "Value": "__COST_CENTER__"
+  },
+  {
+    "Key": "mon:project",
+    "Value": "__PROJECT_NAME__"
+  },
+  {
+    "Key": "mon:env",
+    "Value": "non-prod"
+  },
+  {
+    "Key": "mon:regulated",
+    "Value": "no"
+  },
+  {
+    "Key": "mon:data-classification",
+    "Value": "internal"
+  },
+  {
+    "Key": "spectrum:deployment",
+    "Value": "yes"
+  }
+]

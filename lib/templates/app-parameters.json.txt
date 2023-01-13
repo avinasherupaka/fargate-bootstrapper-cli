@@ -1,0 +1,42 @@
+[
+  {
+    "ParameterKey": "Cpu",
+    "ParameterValue": "256"
+  },
+  {
+    "ParameterKey": "Memory",
+    "ParameterValue": "1GB"
+  },
+  {
+    "ParameterKey": "AppName",
+    "ParameterValue": "__APPLICATION_NAME__"
+  },
+  {
+    "ParameterKey": "InstanceCount",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "HealthCheckPath",
+    "ParameterValue": "__HEALTH_CHECK_PATH__"
+  },
+  {
+    "ParameterKey": "HealthCheckIntervalSeconds",
+    "ParameterValue": "__HEALTH_CHECK_INTERVAL__"
+  },
+  {
+    "ParameterKey": "ImageUrl",
+    "ParameterValue": "__IMAGE_URL__"
+  },
+  {
+    "ParameterKey": "FargateStackName",
+    "ParameterValue": "__FARGATE_STACK_NAME__"
+  },
+  {
+    "ParameterKey": "StopForSmoketesting",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnvironmentVariables",
+    "ParameterValue": "{ \"environment\": __ENVIRONMENT_VARIABLES__  }"
+  }
+]

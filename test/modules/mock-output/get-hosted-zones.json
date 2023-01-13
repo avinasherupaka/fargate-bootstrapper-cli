@@ -1,0 +1,13 @@
+{
+  "HostedZones": [
+      {
+          "ResourceRecordSetCount": 16,
+          "CallerReference": "2019-05-31T19:01:13.295Z",
+          "Config": {
+              "PrivateZone": false
+          },
+          "Id": "/hostedzone/TEST_HOSTED_ZONE",
+          "Name": "123456789101.internal.organization.net."
+      }
+  ]
+}

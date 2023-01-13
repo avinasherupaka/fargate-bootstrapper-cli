@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "target": "es2015",
+    "baseUrl": "lib",
+    "paths": {
+      "@/": [ "./lib" ]
+    }
+  },
+  "typeAcquisition": {
+    "include": [
+        "jest"
+    ]
+},
+  "include": [
+    "./lib/**/*"
+  ]
+}

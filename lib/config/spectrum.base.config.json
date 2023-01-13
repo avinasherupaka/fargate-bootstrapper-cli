@@ -1,0 +1,20 @@
+{
+  "AssumeRoleName": "",
+  "ProjectOwner": "",
+  "CostCenter": "",
+  "ProjectName": "",
+  "FargateAccountId": "",
+  "FargateStackName": "",
+  "FargateRegion": "",
+  "HealthCheckPath": "/",
+  "HealthCheckIntervalSeconds": 60,
+  "InstanceCount": 2,
+  "CpuAllocation": "256",
+  "MemoryAllocation": "1GB",
+  "BaseDomain": "",
+  "RoleARN": "",
+  "EnvironmentVariables": {
+    "development": {},
+    "production": {}
+  }
+}

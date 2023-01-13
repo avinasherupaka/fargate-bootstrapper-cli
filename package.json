@@ -1,0 +1,90 @@
+{
+  "name": "@organizationit/spectrum-cli",
+  "version": "1.0.10",
+  "description": "CLI tool for application deployment and management of the AWS Fargate environment",
+  "main": "index.js",
+  "preferGlobal": true,
+  "bin": {
+    "spectrum": "./index.js"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "scripts": {
+    "lint": "eslint --ext .js ./lib",
+    "test": "npm run lint && npm run test:unit",
+    "test:unit": "jest --verbose --coverage"
+  },
+  "author": "Jamar Vales <JTVALE@organization.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.platforms.engineering/acs2-foundation/spectrum-cli"
+  },
+  "license": "UNLICENSED",
+  "_moduleAliases": {
+    "@": "./lib"
+  },
+  "jest": {
+    "verbose": true,
+    "collectCoverage": true,
+    "coverageThreshold": {
+      "global": {
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
+      }
+    },
+    "collectCoverageFrom": [
+      "**/*.js",
+      "!**/classes/**",
+      "!**/*.schema.js",
+      "!**/test/**",
+      "!**/config/**",
+      "!**/env/**"
+    ],
+    "setupFiles": [
+      "./test/_jestsetup"
+    ],
+    "roots": [
+      "test/"
+    ],
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+    "transformIgnorePatterns": [
+      "node_modules/.*"
+    ],
+    "testPathIgnorePatterns": [
+      ".*_jestsetup.js",
+      ".*json"
+    ],
+    "testEnvironment": "node",
+    "modulePaths": [
+      "<rootDir>/lib"
+    ],
+    "moduleNameMapper": {
+      "@/(.*)": "<rootDir>/lib/$1"
+    }
+  },
+  "devDependencies": {
+    "@types/jest": "^24.0.13",
+    "eslint": "^5.16.0",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-import": "^2.17.3",
+    "jest": "^24.8.0"
+  },
+  "dependencies": {
+    "await-to-js": "^2.1.1",
+    "aws-sdk": "^2.470.0",
+    "chalk": "^2.4.2",
+    "commander": "^2.20.0",
+    "dotenv": "^8.0.0",
+    "execa": "^1.0.0",
+    "figlet": "^1.2.3",
+    "inquirer": "^6.3.1",
+    "lodash": "^4.17.15",
+    "module-alias": "^2.2.0",
+    "signale": "^1.4.0",
+    "update-check": "^1.5.3",
+    "uuid": "^3.3.2"
+  }
+}

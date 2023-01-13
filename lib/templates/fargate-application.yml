@@ -1,0 +1,525 @@
+# Template used to deploy an application to Fargate
+# deploys specified app to specified Fargate stack
+# Jenkins agent EC2 role must be allowed to assume to target account: arn:aws:iam::${accountId}:role/standard-user
+
+#TODO add DNS record inside lambda
+#TODO remove parameters from Lambda and hardcode them.
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Application Deployment by Spectrum
+Conditions:
+  CreateTaskExecutionRole:
+    Fn::Equals:
+      - Ref: TaskExecutionRoleName
+      - ''
+Resources:
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: ${FargateStackName}-Vpc
+      HealthyThresholdCount: 2
+      HealthCheckIntervalSeconds:
+        Ref: HealthCheckIntervalSeconds
+      HealthCheckPath:
+        Ref: HealthCheckPath
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      PermissionsBoundary:
+        Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/standard-permissions-boundary"
+      Policies:
+        -
+          PolicyName:
+            Fn::Sub: "${AWS::StackName}-lambda"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - "elasticloadbalancing:*"
+                  - "ecs:*"
+                  - "cloudformation:*"
+                  - "lambda:*"
+                  - "ec2:*"
+                  - "iam:*"
+                Resource: "*"
+  DeleteListenerRuleLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import boto3
+
+          print('Loading function')
+
+          elb = boto3.client('elbv2')
+
+          def handler(event, context):
+            try:
+              if event['RequestType'] == "Delete":
+                listenerRuleArn = event['ResourceProperties']['ListenerRuleArn']
+                elb.delete_rule(
+                RuleArn=listenerRuleArn
+                )
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                return
+
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+            except Exception as e:
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Exception": str(e)})
+              return
+      Handler: index.handler
+      Role:
+        Fn::GetAtt: LambdaRole.Arn
+      Runtime: python3.7
+      Timeout: 900
+  DeleteListenerRuleResource:
+    DependsOn: LambdaResource
+    Type: "Custom::DeleteListenerRule"
+    Properties:
+      ServiceToken:
+        Fn::GetAtt: DeleteListenerRuleLambda.Arn
+      ListenerRuleArn:
+        Ref: ListenerRule
+  GroupHealthCheckLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import time
+          import datetime
+          import cfnresponse
+          import boto3
+
+          print('Loading function')
+
+          elb = boto3.client('elbv2')
+          cloudformation = boto3.client('cloudformation')
+
+          def setListenerRuleHost(listenerRuleArn, host):
+            elb.modify_rule(
+            RuleArn=listenerRuleArn,
+            Conditions=[
+              {
+                'Field': 'host-header',
+                'Values': [
+                  host
+                ]
+              }
+            ]
+            )
+
+          def handler(event, context):
+            try:
+
+              host = event['ResourceProperties']['Host']
+              listenerArn = event['ResourceProperties']['ListenerArn']
+              listenerRuleArn = event['ResourceProperties']['ListenerRuleArn']
+              targetGroupArn = event['ResourceProperties']['TargetGroupArn']
+              duration = int(event['ResourceProperties']['Duration'])
+              stopForSmoketesting = False
+              if 'StopForSmoketesting' in event['ResourceProperties']:
+                stopForSmoketesting = True if event['ResourceProperties']['StopForSmoketesting'] == "true" else False
+
+              responseData = {}
+
+              if event['RequestType'] == "Delete":
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                return
+
+              rules = elb.describe_rules(
+              ListenerArn=listenerArn
+              )["Rules"]
+
+              def ruleContainsHost(rule):
+                for condition in rule["Conditions"]:
+                  if condition["Field"] == "host-header" and condition["Values"][0] == host:
+                    return True
+                return False
+
+              for rule in rules:
+                if rule["Priority"] == "default":
+                  rule["Priority"] = 50001
+
+              rulesForHost = list(filter(ruleContainsHost, rules))
+
+              endTime = datetime.datetime.now() + datetime.timedelta(seconds=duration)
+
+              while True:
+                print("Waiting for targets to become healthy")
+                targetHealthDescriptions = elb.describe_target_health(
+                TargetGroupArn=targetGroupArn
+                )["TargetHealthDescriptions"]
+
+                print("Checking " + str(len(targetHealthDescriptions)) + " targets")
+
+                if len(list(filter(lambda healthDescription: healthDescription["TargetHealth"]["State"] != "healthy", targetHealthDescriptions))) == 0:
+                  print("Targets healthy")
+
+                  if stopForSmoketesting:
+                    print("leaving new version of app deployed with smoketest- prefixed host to allow external smoke testing")
+                    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                    return
+
+                  if len(rulesForHost) < 2:
+                    setListenerRuleHost(listenerRuleArn, host)
+                    print("Mapped new version of application to final host name")
+
+                  if len(rulesForHost) == 1:
+                    previousVersionStackName = cloudformation.describe_stack_resources(
+                    PhysicalResourceId=rulesForHost[0]["RuleArn"]
+                    )["StackResources"][0]["StackName"]
+
+                    cloudformation.delete_stack(
+                    StackName=previousVersionStackName
+                    )
+
+                    print("Deleting previous version of application")
+
+                    responseData["Message"] = "Deleting previous version of application, stack name: " + previousVersionStackName
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                  return
+                if datetime.datetime.now() > endTime:
+                  print("Targets didn't become healthy within specified duration of " + str(duration) + " seconds.  Rolling back deployment")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
+                  return
+                time.sleep(10)
+            except Exception as e:
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Exception": str(e)})
+              return
+      Handler: index.handler
+      Role:
+        Fn::GetAtt: LambdaRole.Arn
+      Runtime: python3.7
+      Timeout: 900
+  LambdaResource:
+    DependsOn: Service
+    Type: "Custom::AwaitHealthyInstances"
+    Properties:
+      ServiceToken:
+        Fn::GetAtt: GroupHealthCheckLambda.Arn
+      Host:
+        Fn::Sub: "${AppName}.${AWS::AccountId}.internal.organization.net"
+      ListenerArn:
+        Fn::ImportValue:
+          Fn::Sub: ${FargateStackName}-HttpListener
+      ListenerRuleArn:
+        Ref: ListenerRule
+      TargetGroupArn:
+        Ref: TargetGroup
+      Duration: 300
+      StopForSmoketesting:
+        Ref: StopForSmoketesting
+  PriorityLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import time
+          import datetime
+          import cfnresponse
+          import boto3
+
+          print('Loading function')
+
+          elb = boto3.client('elbv2')
+
+          def handler(event, context):
+            try:
+              listenerArn = event['ResourceProperties']['ListenerArn']
+
+              if event['RequestType'] == "Delete" or event['RequestType'] == "Update":
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                return
+
+              rules = elb.describe_rules(
+              ListenerArn=listenerArn
+              )["Rules"]
+
+              for rule in rules:
+                if rule["Priority"] == "default":
+                  rule["Priority"] = 50001
+
+              prospectivePriority = 1
+              rules.sort(key=lambda x: int(x["Priority"]))
+              for rule in rules:
+                if int(rule["Priority"]) == prospectivePriority:
+                  prospectivePriority += 1
+                else:
+                  break
+
+              print("Returning priority: " + str(prospectivePriority))
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Priority": str(prospectivePriority)})
+
+            except Exception as e:
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Exception": str(e)})
+              return
+      Handler: index.handler
+      Role:
+        Fn::GetAtt: LambdaRole.Arn
+      Runtime: python3.7
+      Timeout: 900
+  Priority:
+    Type: "Custom::Priority"
+    Properties:
+      ServiceToken:
+        Fn::GetAtt: PriorityLambda.Arn
+      ListenerArn:
+        Fn::ImportValue:
+          Fn::Sub: ${FargateStackName}-HttpListener
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - TargetGroupArn:
+            Ref: TargetGroup
+          Type: forward
+      Conditions:
+        - Field: host-header
+          Values:
+            - Fn::Sub: "smoketest-${AppName}.${AWS::AccountId}.internal.organization.net"
+      ListenerArn:
+        Fn::ImportValue:
+          Fn::Sub: ${FargateStackName}-HttpListener
+      Priority:
+        Fn::GetAtt: Priority.Priority
+
+  TaskDefinitionEnvironmentLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import cfnresponse
+
+          print('Loading function')
+
+          def handler(event, context):
+            try:
+              environmentVariables = event['ResourceProperties']['EnvironmentVariables']
+              print(environmentVariables)
+              evJson = json.loads(environmentVariables)
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Environment": evJson["environment"]})
+            except Exception as e:
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Exception": str(e)})
+              return
+      Handler: index.handler
+      Role:
+        Fn::GetAtt: LambdaRole.Arn
+      Runtime: python3.7
+      Timeout: 900
+  TaskDefinitionEnvironment:
+    Type: "Custom::TaskDefinitionEnvironment"
+    Properties:
+      ServiceToken:
+        Fn::GetAtt: TaskDefinitionEnvironmentLambda.Arn
+      EnvironmentVariables:
+        Ref: EnvironmentVariables
+  TaskExecutionRole:
+    Condition: CreateTaskExecutionRole
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      PermissionsBoundary:
+        Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/standard-permissions-boundary"
+      Policies:
+        - PolicyName:
+            Fn::Sub: "${AWS::StackName}-createLogGroup"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "logs:CreateLogGroup"
+                Resource: "*"
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Cpu:
+        Ref: Cpu
+      Memory:
+        Ref: Memory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name:
+            Ref: AppName
+          Image:
+            Ref: ImageUrl
+          PortMappings:
+            - ContainerPort: 80
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: true
+              awslogs-region: us-east-1
+              awslogs-group:
+                Fn::Sub: /aws/fargate/${AppName}
+              awslogs-stream-prefix: logs
+          Environment:
+            Fn::GetAtt: TaskDefinitionEnvironment.Environment
+      TaskRoleArn:
+        Fn::If:
+          - CreateTaskExecutionRole
+          - Fn::GetAtt: TaskExecutionRole.Arn
+          - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/${TaskExecutionRoleName}
+      ExecutionRoleArn:
+        Fn::If:
+          - CreateTaskExecutionRole
+          - Fn::GetAtt: TaskExecutionRole.Arn
+          - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/${TaskExecutionRoleName}
+  ServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ALB
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: ${FargateStackName}-Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId:
+            Fn::ImportValue:
+              Fn::Sub: ${FargateStackName}-AlbSecurityGroup
+  Service:
+    DependsOn:
+      - ListenerRule
+    Type: AWS::ECS::Service
+    Properties:
+      DesiredCount:
+        Ref: InstanceCount
+      LaunchType: FARGATE
+      TaskDefinition:
+        Ref: TaskDefinition
+      Cluster:
+        Fn::ImportValue:
+          Fn::Sub: ${FargateStackName}-Cluster
+      LoadBalancers:
+        - ContainerName:
+            Ref: AppName
+          ContainerPort: 80
+          TargetGroupArn:
+            Ref: TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - Ref: ServiceSecurityGroup
+          Subnets:
+            - Fn::ImportValue:
+                Fn::Sub: ${FargateStackName}-Subnet1
+            - Fn::ImportValue:
+                Fn::Sub: ${FargateStackName}-Subnet2
+# TODO do this programatically in health check lambda
+#  AppDns:
+#    Type: AWS::Route53::RecordSet
+#    Properties:
+#      Name:
+#        Fn::Sub: "${AppName}.${AWS::AccountId}.internal.organization.net."
+#      HostedZoneName:
+#        Fn::Sub: "${AWS::AccountId}.internal.organization.net."
+#      Type: A
+#      AliasTarget:
+#        DNSName:
+#          Fn::ImportValue:
+#            Fn::Sub: ${FargateStackName}-DNSName
+#        HostedZoneId:
+#          Fn::ImportValue:
+#            Fn::Sub: ${FargateStackName}-HostedZoneId
+#Outputs:
+#  DNS:
+#    Value:
+#      Ref: AppDns
+#    Export:
+#      Name:
+#        Fn::Sub: ${AWS::StackName}-RouteDns
+Parameters:
+  FargateStackName:
+    Type: String
+  ImageUrl:
+    Type: String
+  TaskExecutionRoleName:
+    Type: String
+    Default: ''
+    Description: "Name of existing task execution IAM role this application should use(for Vault, etc.), must allow ecs-tasks.amazonaws.com to assume, include policy: AmazonECSTaskExecutionRolePolicy and have * permission to logs:CreateLogGroup.  If left blank, a new role will be created with default permissions each time the application is deployed"
+  Cpu:
+    Type: String
+    Default: 256
+    AllowedValues:
+      - 256
+      - 512
+      - 1024
+      - 2048
+    Description: "For information on valid CPU/memory combinations, see: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html"
+  Memory:
+    Type: String
+    Default: 1GB
+    AllowedValues:
+      - 0.5GB
+      - 1GB
+      - 2GB
+      - 3GB
+      - 4GB
+    Description: "For information on valid CPU/memory combinations, see: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html"
+  AppName:
+    Type: String
+    Description: Host name where you must point your proxy(e.g Ocelot route)
+  InstanceCount:
+    Type: Number
+    AllowedValues:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+    Default: 2
+  HealthCheckPath:
+    Type: String
+    Default: /ping
+  HealthCheckIntervalSeconds:
+    Type: String
+    Default: 30
+  StopForSmoketesting:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+    Description: Allow external smoke testing by leaving new app deployed with smoketest- prefixed host instead going live after health check?
+  EnvironmentVariables:
+    Type: String
+    Description: JSON array of environment variables config for application
